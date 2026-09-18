@@ -1,20 +1,33 @@
 $Host.UI.RawUI.WindowTitle = "Timer Notify"
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
 
 $AppId = "TimerAlert.App"
 
 function Register-ToastApp {
     param([string]$AppId, [string]$DisplayName)
     $regPath = "HKCU:\Software\Classes\AppUserModelId\$AppId"
+    $iconPath = "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
+    $existing = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
+    if ($existing.DisplayName -eq $DisplayName -and $existing.IconUri -eq $iconPath) {
+        return
+    }
     if (-not (Test-Path $regPath)) {
         New-Item -Path $regPath -Force | Out-Null
     }
     New-ItemProperty -Path $regPath -Name "DisplayName" -Value $DisplayName -PropertyType String -Force | Out-Null
-    New-ItemProperty -Path $regPath -Name "IconUri" -Value "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe" -PropertyType String -Force | Out-Null
+    New-ItemProperty -Path $regPath -Name "IconUri" -Value $iconPath -PropertyType String -Force | Out-Null
 }
 
 Register-ToastApp -AppId $AppId -DisplayName "Timer Alert"
+
+$ToastAvailable = $true
+try {
+    [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+    [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+    [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+} catch {
+    $ToastAvailable = $false
+}
 
 function Show-ToastOrBalloon {
     param(
@@ -22,13 +35,10 @@ function Show-ToastOrBalloon {
         [string]$Message
     )
 
-    $toastOk = $true
-    try {
-        [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-        [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-        [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-
-        $template = @"
+    $toastOk = $ToastAvailable
+    if ($toastOk) {
+        try {
+            $template = @"
 <toast scenario="reminder">
     <visual>
         <binding template="ToastGeneric">
@@ -43,14 +53,15 @@ function Show-ToastOrBalloon {
 </toast>
 "@
 
-        $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-        $xml.LoadXml($template)
-        $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
-        $toast.Tag = "TimerAlert-$([Guid]::NewGuid().ToString('N'))"
-        $toast.Group = "TimerAlert"
-        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($AppId).Show($toast)
-    } catch {
-        $toastOk = $false
+            $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+            $xml.LoadXml($template)
+            $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
+            $toast.Tag = "TimerAlert-$([Guid]::NewGuid().ToString('N'))"
+            $toast.Group = "TimerAlert"
+            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($AppId).Show($toast)
+        } catch {
+            $toastOk = $false
+        }
     }
 
     if (-not $toastOk) {
