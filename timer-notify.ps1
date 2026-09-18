@@ -46,6 +46,8 @@ function Show-ToastOrBalloon {
         $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
         $xml.LoadXml($template)
         $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
+        $toast.Tag = "TimerAlert-$([Guid]::NewGuid().ToString('N'))"
+        $toast.Group = "TimerAlert"
         [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($AppId).Show($toast)
     } catch {
         $toastOk = $false
